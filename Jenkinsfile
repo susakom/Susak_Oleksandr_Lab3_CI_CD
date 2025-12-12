@@ -58,7 +58,9 @@ pipeline {
             */
             steps {
                 echo "Running tests..."
-                sh 'npm test || echo "No tests defined"'
+                nodejs('node18') {
+                    sh 'npm test || echo "No tests defined"'
+                }
             }
         }
 
