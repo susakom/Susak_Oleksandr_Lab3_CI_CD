@@ -44,7 +44,9 @@ pipeline {
             */
             steps {
                 echo "Building application..."
-                sh 'npm install'
+                nodejs('node18')  {
+                    sh 'npm install'
+                }
             }
         }
 
