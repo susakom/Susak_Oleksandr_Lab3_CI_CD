@@ -1,82 +1,61 @@
 /*
-  Jenkinsfile for Multibranch Pipeline
+  Jenkinsfile for CICD Multibranch Pipeline
 
-  Purpose:
-  - Use Git branches as environments
-  - main  -> port 3000
-  - dev   -> port 3001
-  - Different logo.svg is already handled in Git branches
+  Requirements covered:
+  - Same Jenkinsfile for main and dev
+  - NodeJS version via Global Tools Configuration
+  - npm install / npm test
+  - Different Docker images for main and dev
+  - Different ports for main and dev
 */
 
 pipeline {
-    /*
-      We run the pipeline on any available Jenkins agent.
-      In our case, this is the Jenkins VM itself.
-    */
+
     agent any
 
-    /*
-      Environment variables common for all stages.
-      PORT will be calculated dynamically based on branch name.
-    */
     environment {
-        APP_NAME = "cicd-app"
+        // Base container name (used for stop/remove)
+        CONTAINER_NAME = "nodeapp"
     }
 
     stages {
 
         stage('Checkout') {
-            /*
-              Source code checkout.
-              In Multibranch pipeline Jenkins automatically
-              checks out the correct branch.
-            */
             steps {
-                echo "Checking out source code from branch: ${env.BRANCH_NAME}"
+                echo "Checkout source code from branch: ${env.BRANCH_NAME}"
                 checkout scm
             }
         }
 
         stage('Build') {
-            /*
-              Application build stage.
-              For Node.js app this usually means installing dependencies.
-            */
             steps {
-                echo "Building application..."
                 nodejs('node18') {
+                    echo "Installing NodeJS dependencies"
                     sh 'npm install'
                 }
             }
         }
 
         stage('Test') {
-            /*
-              Test stage.
-              If tests exist, they should be executed here.
-              If not, this stage still demonstrates CI structure.
-            */
             steps {
-                echo "Running tests..."
                 nodejs('node18') {
-                    sh 'npm test || echo "No tests defined"'
+                    echo "Running tests"
+                    sh 'npm test'
                 }
             }
         }
 
         stage('Set Environment Variables') {
-            /*
-              Define environment-specific variables
-              based on branch name.
-            */
             steps {
                 script {
                     if (env.BRANCH_NAME == 'main') {
-                        env.APP_PORT = '3000'
-                        echo "Main branch detected. Using port 3000."
+                        env.IMAGE_NAME = 'nodemain:v1.0'
+                        env.APP_PORT  = '3000'
+                        echo "Main branch detected"
                     } else if (env.BRANCH_NAME == 'dev') {
-                        env.APP_PORT = '3001'
-                        echo "Dev branch detected. Using port 3001."
+                        env.IMAGE_NAME = 'nodedev:v1.0'
+                        env.APP_PORT  = '3001'
+                        echo "Dev branch detected"
                     } else {
                         error "Unsupported branch: ${env.BRANCH_NAME}"
                     }
@@ -85,52 +64,42 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-            /*
-              Build Docker image using Dockerfile from repository.
-              Image tag contains branch name for clarity.
-            */
             steps {
-                echo "Building Docker image..."
+                echo "Building Docker image ${env.IMAGE_NAME}"
                 sh """
-                  docker build \
-                    -t ${APP_NAME}:${env.BRANCH_NAME} .
+                  docker build -t ${env.IMAGE_NAME} .
                 """
             }
         }
 
         stage('Deploy') {
-            /*
-              Deployment stage.
-              - Stop and remove existing container if it exists
-              - Run new container on branch-specific port
-            */
             steps {
-                echo "Deploying application on port ${env.APP_PORT}..."
+                echo "Deploying application on port ${env.APP_PORT}"
 
                 sh """
+                  # Stop and remove previously running container (if exists)
                   
-                  docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f
-
+                  docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f  
+                  
                   echo "Removing container with the same name (if exists)..."
                   docker rm -f ${CONTAINER_NAME}-${env.BRANCH_NAME} || true
-                
+
+
+                  # Run new container with minimal downtime
                   docker run -d \
-                    --name ${APP_NAME}-${env.BRANCH_NAME} \
+                    --name ${CONTAINER_NAME}-${env.BRANCH_NAME} \
+                    --expose ${env.APP_PORT} \
                     -p ${env.APP_PORT}:3000 \
-                    ${APP_NAME}:${env.BRANCH_NAME}
+                    ${env.IMAGE_NAME}
                 """
             }
         }
     }
 
     post {
-        /*
-          Post actions are executed after pipeline completion.
-        */
         success {
-            echo "Deployment successful for branch ${env.BRANCH_NAME}"
+            echo "Deployment completed successfully for branch ${env.BRANCH_NAME}"
         }
-
         failure {
             echo "Pipeline failed for branch ${env.BRANCH_NAME}"
         }
