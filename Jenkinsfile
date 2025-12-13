@@ -108,8 +108,12 @@ pipeline {
                 echo "Deploying application on port ${env.APP_PORT}..."
 
                 sh """
-                  docker rm -f ${APP_NAME}-${env.BRANCH_NAME} || true
+                  
+                  docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f
 
+                  echo "Removing container with the same name (if exists)..."
+                  docker rm -f ${CONTAINER_NAME}-${env.BRANCH_NAME} || true
+                
                   docker run -d \
                     --name ${APP_NAME}-${env.BRANCH_NAME} \
                     -p ${env.APP_PORT}:3000 \
