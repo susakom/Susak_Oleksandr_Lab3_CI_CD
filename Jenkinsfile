@@ -78,7 +78,8 @@ pipeline {
 
                 sh """
                   # Stop and remove previously running container (if exists)
-                  docker rm -f ${CONTAINER_NAME}-${env.BRANCH_NAME} || true
+                  
+                  docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f  
 
                   # Run new container with minimal downtime
                   docker run -d \
