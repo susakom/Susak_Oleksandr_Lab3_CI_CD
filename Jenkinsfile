@@ -67,8 +67,35 @@ pipeline {
             steps {
                 echo "Building Docker image ${env.IMAGE_NAME}"
                 sh """
-                  docker build -t ${env.IMAGE_NAME} .
+                    docker build -t ${env.IMAGE_NAME} .
                 """
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                script {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-creds',
+                            usernameVariable: 'DOCKERHUB_USER',
+                            passwordVariable: 'DOCKERHUB_PASS'
+                        )
+                    ]) {
+                        sh """
+                            echo "Login to Docker Hub"
+                            echo \$DOCKERHUB_PASS | docker login -u \$DOCKERHUB_USER --password-stdin
+
+                            echo "Tag image for Docker Hub"
+                            docker tag ${env.IMAGE_NAME} \$DOCKERHUB_USER/lab3_ci_cd:${env.BRANCH_NAME}
+
+                            echo "Push image to Docker Hub"
+                            docker push \$DOCKERHUB_USER/lab3_ci_cd:${env.BRANCH_NAME}
+
+                            docker logout
+                        """
+                    }
+                }
             }
         }
 
@@ -77,20 +104,18 @@ pipeline {
                 echo "Deploying application on port ${env.APP_PORT}"
 
                 sh """
-                  # Stop and remove previously running container (if exists)
-                  
-                  docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f  
-                  
-                  echo "Removing container with the same name (if exists)..."
-                  docker rm -f ${CONTAINER_NAME}-${env.BRANCH_NAME} || true
+                    # Stop and remove containers using the same port
+                    docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f
 
+                    echo "Removing container with the same name (if exists)..."
+                    docker rm -f ${CONTAINER_NAME}-${env.BRANCH_NAME} || true
 
-                  # Run new container with minimal downtime
-                  docker run -d \
-                    --name ${CONTAINER_NAME}-${env.BRANCH_NAME} \
-                    --expose ${env.APP_PORT} \
-                    -p ${env.APP_PORT}:3000 \
-                    ${env.IMAGE_NAME}
+                    # Run new container with minimal downtime
+                    docker run -d \
+                        --name ${CONTAINER_NAME}-${env.BRANCH_NAME} \
+                        --expose ${env.APP_PORT} \
+                        -p ${env.APP_PORT}:3000 \
+                        ${env.IMAGE_NAME}
                 """
             }
         }
