@@ -14,7 +14,6 @@ pipeline {
     agent any
 
     environment {
-        // Base container name (used for stop/remove)
         CONTAINER_NAME = "nodeapp"
     }
 
@@ -99,34 +98,27 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
+        stage('Trigger CD Pipeline') {
             steps {
-                echo "Deploying application on port ${env.APP_PORT}"
-
-                sh """
-                    # Stop and remove containers using the same port
-                    docker ps --filter "publish=${env.APP_PORT}" -q | xargs -r docker rm -f
-
-                    echo "Removing container with the same name (if exists)..."
-                    docker rm -f ${CONTAINER_NAME}-${env.BRANCH_NAME} || true
-
-                    # Run new container with minimal downtime
-                    docker run -d \
-                        --name ${CONTAINER_NAME}-${env.BRANCH_NAME} \
-                        --expose ${env.APP_PORT} \
-                        -p ${env.APP_PORT}:3000 \
-                        ${env.IMAGE_NAME}
-                """
+                script {
+                    if (env.BRANCH_NAME == 'main') {
+                        echo "Triggering Deploy_to_main pipeline"
+                        build job: 'Deploy_to_main', wait: false
+                    } else if (env.BRANCH_NAME == 'dev') {
+                        echo "Triggering Deploy_to_dev pipeline"
+                        build job: 'Deploy_to_dev', wait: false
+                    }
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Deployment completed successfully for branch ${env.BRANCH_NAME}"
+            echo "CI pipeline completed successfully for branch ${env.BRANCH_NAME}"
         }
         failure {
-            echo "Pipeline failed for branch ${env.BRANCH_NAME}"
+            echo "CI pipeline failed for branch ${env.BRANCH_NAME}"
         }
     }
 }
